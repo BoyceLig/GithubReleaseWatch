@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="GithubReleaseWatch.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Icon="GithubReleaseWatch.ico" Title="设置" Height="540" Width="520"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
+        <StackPanel Margin="16">
+            <TextBlock Text="网络代理（拉取 GitHub 数据时使用）" FontWeight="Bold" FontSize="14"/>
+
+            <CheckBox x:Name="ChkEnabled" Content="启用代理" Margin="0,10,0,0"
+                      Checked="ChkEnabled_Changed" Unchecked="ChkEnabled_Changed"/>
+
+            <StackPanel x:Name="ProxyPanel" Margin="0,10,0,0" IsEnabled="False">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                        <TextBlock Text="类型"/>
+                        <ComboBox x:Name="CmbType" Height="26" Margin="0,4,0,0">
+                            <ComboBoxItem Content="HTTP"/>
+                            <ComboBoxItem Content="SOCKS5"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                        <TextBlock Text="端口"/>
+                        <TextBox x:Name="TxtPort" Height="26" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="服务器地址（IP 或域名）" Margin="0,10,0,0"/>
+                <TextBox x:Name="TxtHost" Height="26" Margin="0,4,0,0"/>
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="用户名（可选）"/>
+                        <TextBox x:Name="TxtUser" Height="26" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="密码（可选）"/>
+                        <PasswordBox x:Name="TxtPwd" Height="26" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 测试代理按钮：仅显示「可访问/不可访问」 -->
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="BtnTestProxy" Content="🔌 测试代理" Padding="10,4" Click="BtnTestProxy_Click"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Token 模块：标题单独一行，启用复选框置于输入框上方（与"启用代理"同构） -->
+            <TextBlock Text="GitHub Token（可选，速率限制 60 → 5000 次/小时）"
+                       FontWeight="Bold" FontSize="14"/>
+
+            <!-- 当前配额显示（紧贴 Token 标题下方） -->
+            <Border Background="#F3F4F6" CornerRadius="4" Padding="10,6" Margin="0,10,0,0">
+                <TextBlock x:Name="TxtRateLimit" Text="当前配额：加载中…"
+                           FontSize="12" Foreground="#374151" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- 启用 Token：与「启用代理」同层级同位置（标题正下方、输入框正上方） -->
+            <CheckBox x:Name="ChkTokenEnabled" Content="启用 Token" Margin="0,10,0,0" FontSize="12"
+                      Checked="ChkTokenEnabled_Changed" Unchecked="ChkTokenEnabled_Changed"/>
+
+            <!-- Token 输入框：紧邻启用复选框下方 -->
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtToken" Height="26" Grid.Column="0"/>
+                <Button Grid.Column="1" Content="🔑 获取 Token" Padding="8,3" FontSize="12" Margin="8,0,0,0"
+                        Click="BtnGetToken_Click"
+                        ToolTip="打开 GitHub 令牌创建页（只读公开仓库无需勾选任何权限）"/>
+            </Grid>
+            <TextBlock Text="提示：Token 字符串始终保存到本地配置；只有勾选「启用 Token」时才会真正发给 GitHub（用于提升到 5000/小时）。"
+                       Foreground="#6B7280" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+            <!-- 测试 Token 按钮：验证 Token 是否生效 -->
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button x:Name="BtnTestToken" Content="🔑 测试 Token" Padding="10,4" Click="BtnTestToken_Click"/>
+            </StackPanel>
+
+            <Separator Margin="0,14"/>
+            <TextBlock Text="刷新时机" FontWeight="Bold" FontSize="14"/>
+            <CheckBox x:Name="ChkRefreshOnStartup" Content="打开软件时自动刷新所有仓库"
+                      Margin="0,8,0,0" IsChecked="True"/>
+
+            <!-- 底部唯一入口：完整申请流程独立窗口 -->
+            <Button x:Name="BtnShowAllHelp" Content="📖 查看完整申请流程参考（Token + 代理）"
+                    Padding="10,4" HorizontalAlignment="Left" Margin="0,14,0,0"
+                    Click="BtnShowAllHelp_Click"/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="取消" Padding="14,4" IsCancel="True"/>
+                <Button Content="保存" Padding="14,4" Margin="8,0,0,0" IsDefault="True" Click="BtnOk_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

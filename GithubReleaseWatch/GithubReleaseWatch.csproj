@@ -1,0 +1,58 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GithubReleaseWatch</RootNamespace>
+    <AssemblyName>GithubReleaseWatch</AssemblyName>
+    <Version>1.0.0</Version>
+    <Product>GithubReleaseWatch</Product>
+    <Authors>Boyce Lig</Authors>
+    <Description>GitHub Release 版本监测工具</Description>
+    <Copyright>Copyright © 2026 Boyce Lig. 非商业许可：可修改、可二创，不可商用。</Copyright>
+    <!-- exe 文件图标 + 窗口图标 -->
+    <ApplicationIcon>GithubReleaseWatch.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      配置文件：声明为 None 且永不复制。
+      为什么不用 CopyToOutputDirectory：那会在每次编译时把项目根的模板
+      覆盖到输出目录，抹掉用户在 exe 同目录维护的仓库列表。
+      为什么必须显式声明：不声明的话 MSBuild 会把它当"孤儿文件"，
+      增量构建时从输出目录删掉。
+    -->
+    <None Update="config.json" CopyToOutputDirectory="Never" />
+    <!-- 图标随程序发布（运行时供托盘 NotifyIcon / 关于窗口读取） -->
+    <None Update="GithubReleaseWatch.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 关于窗口头部用的大尺寸图标（256 PNG） -->
+    <None Update="AppIcon.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 许可证随程序发布 -->
+    <None Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 窗口 Icon= 需要 WPF 资源 -->
+    <Resource Include="GithubReleaseWatch.ico" />
+  </ItemGroup>
+
+  <!--
+    种子配置：仅当输出目录里**不存在** config.json 时才补一份模板（首次构建）。
+    已存在的配置一律保留，绝不覆盖。
+  -->
+  <Target Name="CopySeedConfigIfMissing" AfterTargets="Build">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\config.json"
+          DestinationFiles="$(OutDir)config.json"
+          Condition="!Exists('$(OutDir)config.json')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishSeedConfigIfMissing" AfterTargets="Publish">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\config.json"
+          DestinationFiles="$(PublishDir)config.json"
+          Condition="!Exists('$(PublishDir)config.json')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

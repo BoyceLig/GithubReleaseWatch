@@ -1,0 +1,72 @@
+# ===== .NET / Visual Studio =====
+## 编译输出
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio 用户设置与缓存
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.rsuser
+
+## MSBuild / NuGet
+*.binlog
+*.buildlog
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+
+## ReSharper / Rider / Visual Assist
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+.idea/
+*.sln.iml
+.vscode/
+
+## 测试与覆盖率
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## 发布产物
+publish/
+PublishOutput/
+*.publishsettings
+*.pubxml
+*.pubxml.user
+
+# ===== 本项目的运行时数据 =====
+## 用户本地配置（含 Token / 代理账密，切勿提交）
+## 注意：仓库根目录的 config.json 是种子模板，需要提交；
+##       仅忽略编译输出目录里的运行时副本。
+GithubReleaseWatch/bin/**/config.json
+GithubReleaseWatch/obj/**/config.json
+
+# ===== OS / 编辑器 =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.swo

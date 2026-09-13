@@ -1,0 +1,22 @@
+{
+  "Repos": [
+    {
+      "Url": "https://github.com/BoyceLig/GithubReleaseWatch",
+      "Owner": "BoyceLig",
+      "Repo": "GithubReleaseWatch",
+      "CurrentVersion": "v1.0.0"
+    }
+  ],
+  "ShowPrerelease": false,
+  "Token": null,
+  "TokenEnabled": false,
+  "Proxy": {
+    "Enabled": true,
+    "Type": "Socks5",
+    "Host": "127.0.0.1",
+    "Port": 7897,
+    "Username": null,
+    "Password": null
+  },
+  "RefreshOnStartup": true
+}
