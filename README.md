@@ -15,6 +15,12 @@
 - **添加查重** —— 重复添加同一仓库会弹窗拦截
 - **托盘常驻** —— **打开软件即驻留系统托盘**（不必先关窗口），关闭窗口最小化到托盘，双击图标恢复窗口，右键可刷新/设置/退出
 
+<img width="1136" height="693" alt="image" src="https://github.com/user-attachments/assets/b7a8d32e-e248-4e39-90d1-d28bc2872bf9" />
+<img width="506" height="253" alt="image" src="https://github.com/user-attachments/assets/297d9b43-a633-475c-9dfd-0024bc52faaa" />
+<img width="506" height="533" alt="image" src="https://github.com/user-attachments/assets/f63ede44-5490-432e-946e-d9a29cdaddc4" />
+<img width="486" height="491" alt="image" src="https://github.com/user-attachments/assets/335b070c-6a03-4c5f-9d14-5426d65a2fd0" />
+
+
 ## 环境要求
 
 - Windows 10 / 11
@@ -23,7 +29,7 @@
 
 ## 运行方式
 
-下载并运行Releases最新版的exe
+下载并解压运行Releases最新版的exe
 
 ## 配置文件
 
