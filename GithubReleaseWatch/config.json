@@ -11,7 +11,7 @@
   "Token": null,
   "TokenEnabled": false,
   "Proxy": {
-    "Enabled": true,
+    "Enabled": false,
     "Type": "Socks5",
     "Host": "127.0.0.1",
     "Port": 7897,
