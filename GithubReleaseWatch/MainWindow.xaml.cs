@@ -23,6 +23,8 @@ namespace GithubReleaseWatch
         public ObservableCollection<RepoViewModel> Repos { get; } = new();
         private NotifyIcon? _notifyIcon;
         private bool _reallyClosing = false; // 用户从托盘菜单"退出"时才真正关闭
+        /// <summary>从托盘恢复并显示"已在运行"提示期间，忽略可能延迟触发的窗口关闭请求。</summary>
+        private DateTime _ignoreClosingUntil;
         private DispatcherTimer? _rateLimitTimer;
         private DispatcherTimer? _rateLimitRedrawTimer;
         /// <summary>最近一次配额快照，用于本地重绘倒计时（不额外请求 API）。</summary>
@@ -511,12 +513,14 @@ namespace GithubReleaseWatch
             menu.Items.Add("📖 显示主窗口", null, (_, _) => ShowMainWindow());
             menu.Items.Add("🔄 刷新全部", null, async (_, _) => await RefreshAllAsync());
             menu.Items.Add("⚙ 设置", null, (_, _) => BtnSettings_Click(this, new RoutedEventArgs()));
+            menu.Items.Add("ℹ️ 关于", null, (_, _) => BtnAbout_Click(this, new RoutedEventArgs()));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("❌ 退出", null, (_, _) => ExitApp());
             _notifyIcon.ContextMenuStrip = menu;
 
             _notifyIcon.DoubleClick += (_, _) => ShowMainWindow();
-            _notifyIcon.BalloonTipClicked += (_, _) => ShowMainWindow();
+            // 注意：Win10 通知未关闭时右键托盘图标，可能会误触发 BalloonTipClicked，
+            // 导致主窗口被唤醒而不是仅弹出菜单，因此不再绑定该事件。
         }
 
         /// <summary>
@@ -536,7 +540,7 @@ namespace GithubReleaseWatch
         }
 
         /// <summary>从托盘恢复主窗口（不重复创建，已显示则前置）。</summary>
-        private void ShowMainWindow()
+        internal void ShowMainWindow()
         {
             if (!IsVisible) Show();
             if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
@@ -544,6 +548,78 @@ namespace GithubReleaseWatch
             Topmost = true;
             Topmost = false;
             Focus();
+        }
+
+        /// <summary>显示"程序已在运行"的模态提示框，以主窗口为 owner。</summary>
+        internal void ShowAlreadyRunningAlert()
+        {
+            ShowMainWindow();
+
+            // 从恢复窗口到提示框关闭后的一段时间内，忽略可能延迟触发的 OnClosing，
+            // 避免"已最小化到系统托盘"的气球通知被误触发。
+            _ignoreClosingUntil = DateTime.Now.AddSeconds(2);
+
+            // 使用自定义 Window 而不是 MessageBox，避免 MessageBox 关闭时误触发 owner 的 OnClosing。
+            var alert = new Window
+            {
+                Owner = this,
+                Title = "提示",
+                Width = 420,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Background = System.Windows.Media.Brushes.White,
+                BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(209, 213, 219)),
+                BorderThickness = new Thickness(1),
+            };
+
+            var root = new Grid();
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            var title = new TextBlock
+            {
+                Text = "提示",
+                FontSize = 15,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(20, 16, 20, 0),
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(17, 24, 39))
+            };
+            Grid.SetRow(title, 0);
+
+            var body = new TextBlock
+            {
+                Text = "GithubReleaseWatch 已经在运行中。",
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(20, 12, 20, 0),
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(55, 65, 81))
+            };
+
+            var okButton = new System.Windows.Controls.Button
+            {
+                Content = "确定",
+                Width = 80,
+                Height = 28,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                Margin = new Thickness(0, 20, 20, 0)
+            };
+            okButton.Click += (_, _) => alert.Close();
+
+            var bodyPanel = new StackPanel();
+            bodyPanel.Children.Add(body);
+            bodyPanel.Children.Add(okButton);
+            Grid.SetRow(bodyPanel, 1);
+
+            root.Children.Add(title);
+            root.Children.Add(bodyPanel);
+            alert.Content = root;
+
+            // 确定按钮支持按回车关闭
+            alert.Loaded += (_, _) => okButton.Focus();
+
+            alert.ShowDialog();
         }
 
         /// <summary>真正退出应用（区分于点 X 触发的"最小化到托盘"）。</summary>
@@ -557,6 +633,15 @@ namespace GithubReleaseWatch
         /// <summary>点窗口关闭按钮 → 最小化到托盘（除非用户从托盘菜单"退出"）。</summary>
         protected override void OnClosing(CancelEventArgs e)
         {
+            // 从托盘恢复并显示"已在运行"提示期间，防御性地忽略此窗口内的关闭请求，
+            // 避免误发"已最小化"通知（根本问题已在 App.xaml 修复：第二实例不再创建 MainWindow）。
+            if (DateTime.Now < _ignoreClosingUntil && !_reallyClosing)
+            {
+                e.Cancel = true;
+                base.OnClosing(e);
+                return;
+            }
+
             if (!_reallyClosing)
             {
                 e.Cancel = true;
