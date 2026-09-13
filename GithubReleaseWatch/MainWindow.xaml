@@ -30,13 +30,15 @@
                     <Button x:Name="BtnAdd" Content="➕ 添加仓库" Padding="12,5" Margin="8,0,0,0" Click="BtnAdd_Click"/>
                     <Button x:Name="BtnRemove" Content="🗑 移除选中" Padding="12,5" Margin="8,0,0,0" Click="BtnRemove_Click"/>
                     <CheckBox x:Name="ChkPrerelease" Content="显示 Pre-release" VerticalAlignment="Center"
-                              Margin="24,0,0,0" Checked="ChkPrerelease_Changed" Unchecked="ChkPrerelease_Changed"/>
-                    <Button x:Name="BtnSettings" Content="⚙ 设置" Padding="12,5" Margin="24,0,0,0" Click="BtnSettings_Click"/>
+                              Margin="8,0,0,0" Checked="ChkPrerelease_Changed" Unchecked="ChkPrerelease_Changed"/>
+                    <Button x:Name="BtnSettings" Padding="12,5" Margin="8,0,0,0" Click="BtnSettings_Click" Content="⚙ 设置"/>
+                    <Button x:Name="BtnAbout" Content="ℹ️ 关于"
+                        Padding="12,5" Click="BtnAbout_Click" Margin="8,0,0,0"/>
                     <TextBlock x:Name="TxtRateLimit" VerticalAlignment="Center" Margin="24,0,0,0" Foreground="#374151" FontSize="12"
                                ToolTip="GitHub API 当前已用/剩余配额（/rate_limit 端点不计配额，可随时刷新）"/>
                 </StackPanel>
-                <Button Grid.Column="1" x:Name="BtnAbout" Content="ℹ️ 关于"
-                        HorizontalAlignment="Right" Padding="12,5" Click="BtnAbout_Click"/>
+                <Button Grid.Column="1" x:Name="BtnExit" Content="❌ 退出"
+                        HorizontalAlignment="Right" ToolTip="完全退出程序" Padding="10,5"  Click="BtnExit_Click" VerticalAlignment="Center" HorizontalContentAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -117,18 +119,16 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="20" FontWeight="Bold"
                                        Foreground="#111827" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
                             <Button Grid.Column="1" Content="🌐 在 GitHub 打开" Click="BtnOpenGitHub_Click" Padding="10,4"/>
                             <Button Grid.Column="2" Content="✅ 完成：升级到最新版本" Click="BtnComplete_Click"
-                                    Padding="10,4" FontWeight="Bold" Margin="8,0,0,0"/>
+                                    Padding="10,4" FontWeight="Bold" Margin="8,0,0,0" HorizontalAlignment="Center"/>
                         </Grid>
-                        <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="#374151">
-                            <Run Text="当前版本："/><Run Text="{Binding CurrentVersion, Mode=OneWay}" FontWeight="Bold"/>
-                            <Run Text="　　最新版本："/><Run Text="{Binding LatestVersion, Mode=OneWay}" FontWeight="Bold"/>
-                        </TextBlock>
+                        <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="#374151"><Run Text="当前版本："/><Run Text="{Binding CurrentVersion, Mode=OneWay}" FontWeight="Bold"/><Run Text=" "/><Run Text="　　最新版本："/><Run Text="{Binding LatestVersion, Mode=OneWay}" FontWeight="Bold"/></TextBlock>
                         <TextBlock Text="{Binding ErrorText}" Foreground="#DC2626" Margin="0,6,0,0" TextWrapping="Wrap"/>
                         <Separator Margin="0,14"/>
 

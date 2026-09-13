@@ -96,7 +96,7 @@ namespace GithubReleaseWatch
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"无法打开浏览器", "打开失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, $"无法打开浏览器：{ex.Message}", "打开失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }

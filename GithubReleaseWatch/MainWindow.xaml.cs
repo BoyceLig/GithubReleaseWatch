@@ -444,6 +444,9 @@ namespace GithubReleaseWatch
             ConfigStore.Save(_config);
         }
 
+        /// <summary>右侧标题栏退出按钮：完全退出程序（区别于点 X 最小化到托盘）。</summary>
+        private void BtnExit_Click(object sender, RoutedEventArgs e) => ExitApp();
+
         /// <summary>把某个具体版本设为当前版本。</summary>
         private void BtnMarkRelease_Click(object sender, RoutedEventArgs e)
         {
