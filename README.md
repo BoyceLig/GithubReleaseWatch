@@ -87,6 +87,7 @@ GitHub 未认证请求的配额为 **60 次/小时**，且按**出口 IP** 统�
 **Boyce Lig**
 
 - GitHub: <https://github.com/BoyceLig/GithubReleaseWatch>
+- 机场推荐：<https://github.com/BoyceLig/ProxyRecommendations>
 
 ---
 
