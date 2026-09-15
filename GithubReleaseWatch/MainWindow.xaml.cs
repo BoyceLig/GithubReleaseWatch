@@ -36,9 +36,30 @@ namespace GithubReleaseWatch
         private MouseWheelHook? _mouseWheelHook;
         /// <summary>WebBrowser 内部 JS 最近一次处理滚轮的时间，避免低层鼠标钩子重复滚动。</summary>
         private DateTime _lastScriptWheel;
+        /// <summary>同一帧内多次触发 ScrollChanged 时，裁剪只做一次（渲染帧统一处理）。</summary>
+        private bool _clipPending;
+
+        // ===== 渲染帧调度（平滑滚动 + WebBrowser 裁剪共用） =====
+        /// <summary>是否已订阅 CompositionTarget.Rendering。</summary>
+        private bool _frameHookAttached;
+        /// <summary>上一渲染帧的时间戳（Stopwatch）。</summary>
+        private long _frameLastTicks;
+
+        // ===== 平滑滚动 =====
+        /// <summary>平滑滚动的目标偏移量（DIP）。滚轮每来一格累积到这里，由渲染帧逐步逼近。</summary>
+        private double _smoothScrollTarget;
+        /// <summary>是否正在平滑滚动。动画期间的 ScrollChanged 是自己触发的，不再回写目标值。</summary>
+        private bool _smoothScrollRunning;
+        /// <summary>本类最后一次写入 ScrollViewer 的偏移量，用来识别"偏移被别人改了"。</summary>
+        private double _lastAppliedOffset;
+        /// <summary>指数逼近的时间常数（秒）。越小越跟手。</summary>
+        private const double SmoothScrollTau = 0.055;
 
         /// <summary>供 MouseWheelHook 判断 JS 桥接是否已处理当前滚轮事件。</summary>
         internal DateTime LastScriptWheel => _lastScriptWheel;
+
+        /// <summary>低层鼠标钩子是否装上了。装上就由钩子独占处理滚轮，JS 桥接只作为兜底。</summary>
+        internal bool IsWheelHookActive => _mouseWheelHook != null;
 
         /// <summary>复制 Markdown 按钮最近一次点击时间，用于防抖避免连续点击卡顿。</summary>
         private DateTime _lastCopyClick;
@@ -103,6 +124,7 @@ namespace GithubReleaseWatch
             {
                 _rateLimitTimer?.Stop();
                 _rateLimitRedrawTimer?.Stop();
+                StopSmoothScroll();
                 _notifyIcon?.Dispose();
                 try { _mouseWheelHook?.Dispose(); }
                 catch { }
@@ -403,6 +425,11 @@ namespace GithubReleaseWatch
             DetailsContent.DataContext = vm;
             DetailsContent.Visibility = vm is null ? Visibility.Collapsed : Visibility.Visible;
             Placeholder.Visibility = vm is null ? Visibility.Visible : Visibility.Collapsed;
+
+            // 切换仓库后卡片会重建，等新布局稳定再裁剪一次，
+            // 防止 WebBrowser (HwndHost) 越界遮挡上方的固定区。
+            if (vm != null)
+                Dispatcher.BeginInvoke(ClipAllWebBrowsers, DispatcherPriority.Loaded);
         }
 
         private void ChkPrerelease_Changed(object sender, RoutedEventArgs e)
@@ -709,28 +736,91 @@ namespace GithubReleaseWatch
         private void VersionBody_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             e.Handled = true;
-            RightScrollViewer?.ScrollToVerticalOffset(
-                RightScrollViewer.VerticalOffset - WheelDeltaToOffset(e.Delta));
+            WheelScrollByRawDelta(e.Delta);
         }
 
         /// <summary>外层 ScrollViewer 滚动时，重新裁剪所有 WebBrowser 到当前视口。</summary>
         private void RightScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            if (e.VerticalChange == 0 && e.HorizontalChange == 0) return;
-            // 推迟到渲染前统一裁剪，避免拖动滚动条时频繁调用 SetWindowRgn 造成撕裂/闪烁。
-            Dispatcher.BeginInvoke(ClipAllWebBrowsers, DispatcherPriority.Render);
+            if (RightScrollViewer == null) return;
+
+            if (_smoothScrollRunning)
+            {
+                // 动画期间偏移量应该只由本类写。出现别的值说明用户正在拖滚动条，
+                // 此时立刻让位给用户操作（否则动画会跟拖动抢偏移量，手感发黏）。
+                if (Math.Abs(e.VerticalOffset - _lastAppliedOffset) > 0.5)
+                    StopSmoothScroll();
+            }
+
+            if (!_smoothScrollRunning)
+                _smoothScrollTarget = e.VerticalOffset;
+
+            // 视口尺寸变化（缩放窗口、拖分栏）也要重裁，否则浏览器会按旧视口越界露出固定区
+            bool viewportChanged = e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0;
+            if (e.VerticalChange == 0 && e.HorizontalChange == 0 && !viewportChanged) return;
+
+            // 裁剪统一放到渲染帧里做，一帧最多一次。
+            // 直接在 ScrollChanged 里排队裁剪的话，一帧内会被触发多次（实测约 3 次/帧），
+            // 每次都要 SetWindowRgn，这是滚动卡顿的主要来源。
+            _clipPending = true;
+            EnsureRenderFrameHook();
+        }
+
+        /// <summary>订阅渲染帧回调。平滑滚动和裁剪都挂在同一个回调里，保证一帧只处理一次。</summary>
+        private void EnsureRenderFrameHook()
+        {
+            if (_frameHookAttached) return;
+            _frameHookAttached = true;
+            _frameLastTicks = Stopwatch.GetTimestamp();
+            CompositionTarget.Rendering += OnRenderFrame;
+        }
+
+        private void DetachRenderFrameHook()
+        {
+            if (!_frameHookAttached) return;
+            _frameHookAttached = false;
+            CompositionTarget.Rendering -= OnRenderFrame;
+        }
+
+        /// <summary>
+        /// 每渲染帧回调：推进平滑滚动 + 裁剪 WebBrowser。
+        /// 两者放在同一帧里，滚动内容、浏览器裁剪、WPF 重绘三者才不会互相错位。
+        /// </summary>
+        private void OnRenderFrame(object? sender, EventArgs e)
+        {
+            long now = Stopwatch.GetTimestamp();
+            double elapsed = (now - _frameLastTicks) / (double)Stopwatch.Frequency;
+            _frameLastTicks = now;
+
+            if (_smoothScrollRunning)
+                AdvanceSmoothScroll(elapsed);
+
+            if (_clipPending)
+            {
+                _clipPending = false;
+                ClipAllWebBrowsers();
+            }
+
+            if (!_smoothScrollRunning && !_clipPending)
+                DetachRenderFrameHook();
         }
 
         /// <summary>遍历右侧所有 WebBrowser，把它们裁剪到 RightScrollViewer 当前可见视口。</summary>
         private void ClipAllWebBrowsers()
         {
-            if (RightScrollViewer == null) return;
+            var scrollViewer = RightScrollViewer;
+            if (scrollViewer == null || !scrollViewer.IsVisible) return;
+
             try
             {
-                foreach (var wb in FindVisualChildren<System.Windows.Controls.WebBrowser>(RightScrollViewer))
+                // 视口矩形和 DPI 都只算一次，多个浏览器共用
+                var context = WebBrowserAirspaceHelper.CreateClipContext(scrollViewer);
+                if (context.ViewportScreenRect.IsEmpty) return;
+
+                foreach (var wb in FindVisualChildren<System.Windows.Controls.WebBrowser>(scrollViewer))
                 {
                     if (wb.IsLoaded && wb.IsVisible)
-                        WebBrowserAirspaceHelper.ClipToScrollViewerViewport(wb, RightScrollViewer);
+                        WebBrowserAirspaceHelper.ClipToViewportRect(wb, context);
                 }
             }
             catch { }
@@ -749,17 +839,83 @@ namespace GithubReleaseWatch
             }
         }
 
-        /// <summary>供 WebBrowser 内部 JavaScript 调用的滚动入口。</summary>
+        /// <summary>供 WebBrowser 内部 JavaScript 调用的滚动入口（低层钩子没装上时的兜底）。</summary>
         public void ScrollOuter(int delta)
         {
+            // 钩子已经装上时不走这条路：两条路径同时处理同一个滚轮事件会偶发"双倍滚动/跳一格"。
+            if (IsWheelHookActive) return;
+
             _lastScriptWheel = DateTime.Now;
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (RightScrollViewer == null) return;
-                RightScrollViewer.ScrollToVerticalOffset(
-                    RightScrollViewer.VerticalOffset - WheelDeltaToOffset(delta));
-            }, DispatcherPriority.Input);
+            Dispatcher.BeginInvoke(() => WheelScrollByRawDelta(delta), DispatcherPriority.Input);
         }
+
+        /// <summary>
+        /// 滚轮增量（±120 的整数倍）→ 平滑滚动。
+        /// 鼠标钩子 / JS 兜底 / 卡片上的 WPF 滚轮事件三个入口都汇总到这里，保证速度完全一致。
+        /// </summary>
+        internal void WheelScrollByRawDelta(int wheelDelta)
+        {
+            if (wheelDelta == 0) return;
+            WheelScrollBy(WheelDeltaToOffset(wheelDelta));
+        }
+
+        /// <summary>
+        /// 按增量滚动右侧面板（delta &gt; 0 表示向上滚），带平滑动画。
+        /// 直接把偏移量一步跳到目标值就是"一格一格翻页"的来源，这里让它在几个渲染帧内指数逼近目标。
+        /// </summary>
+        private void WheelScrollBy(double delta)
+        {
+            var scrollViewer = RightScrollViewer;
+            if (scrollViewer == null || delta == 0) return;
+
+            if (!_smoothScrollRunning) _smoothScrollTarget = scrollViewer.VerticalOffset;
+
+            // 目标以"上次目标"为基准累加，连续快滚时不会因为动画没跟上而吞掉滚动量
+            _smoothScrollTarget = Math.Clamp(_smoothScrollTarget - delta, 0, scrollViewer.ScrollableHeight);
+
+            // 系统关掉了动画效果（辅助功能/性能选项）时保持原来的瞬时滚动
+            if (!SystemParameters.ClientAreaAnimation)
+            {
+                scrollViewer.ScrollToVerticalOffset(_smoothScrollTarget);
+                return;
+            }
+
+            _smoothScrollRunning = true;
+            EnsureRenderFrameHook();
+        }
+
+        /// <summary>按真实帧间隔向目标偏移量做指数逼近，手感接近现代浏览器的平滑滚动。</summary>
+        private void AdvanceSmoothScroll(double elapsed)
+        {
+            var scrollViewer = RightScrollViewer;
+            if (scrollViewer == null)
+            {
+                StopSmoothScroll();
+                return;
+            }
+
+            if (elapsed <= 0) return;
+            if (elapsed > 0.1) elapsed = 0.1; // 掉帧/窗口挂起后不要一步跳过去
+
+            double current = scrollViewer.VerticalOffset;
+            double remaining = _smoothScrollTarget - current;
+
+            if (Math.Abs(remaining) < 0.5)
+            {
+                _lastAppliedOffset = _smoothScrollTarget;
+                scrollViewer.ScrollToVerticalOffset(_smoothScrollTarget);
+                StopSmoothScroll();
+                return;
+            }
+
+            double ratio = 1.0 - Math.Exp(-elapsed / SmoothScrollTau);
+            _lastAppliedOffset = current + remaining * ratio;
+            scrollViewer.ScrollToVerticalOffset(_lastAppliedOffset);
+
+        }
+
+        private void StopSmoothScroll() => _smoothScrollRunning = false;
+
 
         /// <summary>
         /// 把鼠标滚轮 delta 转换为与 WPF ScrollViewer 默认滚动速度一致的偏移量（DIP）。
@@ -818,7 +974,7 @@ namespace GithubReleaseWatch
             {
                 if (itemsControl.ItemContainerGenerator.ContainerFromIndex(i) is ContentPresenter cp)
                 {
-                    var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(cp, "BtnToggleVersionBody");
+                    var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(cp);
                     if (toggle != null)
                     {
                         total++;
@@ -867,7 +1023,7 @@ namespace GithubReleaseWatch
                 {
                     if (itemsControl.ItemContainerGenerator.ContainerFromIndex(i) is ContentPresenter cp)
                     {
-                        var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(cp, "BtnToggleVersionBody");
+                        var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(cp);
                         var viewer = FindVisualChild<System.Windows.Controls.WebBrowser>(cp);
                         if (toggle != null) { toggle.IsChecked = expanded; toggle.Content = expanded ? "▼" : "▶"; }
                         if (viewer != null) viewer.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;

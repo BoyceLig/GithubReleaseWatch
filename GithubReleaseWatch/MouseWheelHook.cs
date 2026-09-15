@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using Point = System.Windows.Point;
 
 namespace GithubReleaseWatch
@@ -75,67 +71,27 @@ namespace GithubReleaseWatch
         }
 
         /// <summary>
-        /// 当鼠标在主窗口内且位于某个 WebBrowser 的屏幕矩形上方时，
-        /// 把滚轮偏移量转给外层 RightScrollViewer。
-        /// 若 JS 桥接已经在处理同一滚轮事件，则跳过避免双倍滚动。
+        /// 当鼠标在主窗口右侧滚动区的可视范围内时，把滚轮增量转给外层 RightScrollViewer。
+        /// 用 ScrollViewer 的视口矩形判断命中，而不是各个 WebBrowser 的元素矩形——
+        /// WebBrowser 被滚出视口时元素矩形仍在固定区上方，用元素矩形判断会"鼠标在标题上却滚了内容"。
         /// </summary>
         private void TryScrollOuter(int x, int y, short delta)
         {
-            if (_window.RightScrollViewer == null) return;
+            var scrollViewer = _window.RightScrollViewer;
+            if (scrollViewer == null || !scrollViewer.IsVisible) return;
 
             // 只有主窗口是当前前景窗口时才处理。打开设置窗口等模态对话框时，
             // 前景窗口是子窗口，此时应忽略滚轮，避免"穿透"到主窗口右侧信息面板。
             if (GetForegroundWindow() != _mainWindowHandle) return;
 
+            var viewport = WebBrowserAirspaceHelper.GetViewportScreenRect(scrollViewer);
+            if (viewport.IsEmpty || !viewport.Contains(new Point(x, y))) return;
+
             // JS 桥接已成功处理时，低层钩子不再重复滚动（时间窗口 100ms）。
             if (DateTime.Now - _window.LastScriptWheel < TimeSpan.FromMilliseconds(100))
                 return;
 
-            var point = new Point(x, y);
-            var windowRect = GetScreenRect(_window);
-            if (!windowRect.Contains(point)) return;
-
-            foreach (var wb in FindVisualChildren<System.Windows.Controls.WebBrowser>(_window))
-            {
-                if (!wb.IsLoaded || !wb.IsVisible) continue;
-                var wbRect = GetScreenRect(wb);
-                if (wbRect.Contains(point))
-                {
-                    double lines = SystemParameters.WheelScrollLines;
-                    if (lines <= 0) lines = 3;
-                    double offset = delta / (double)Mouse.MouseWheelDeltaForOneLine * lines * 16.0;
-                    _window.RightScrollViewer.ScrollToVerticalOffset(
-                        _window.RightScrollViewer.VerticalOffset - offset);
-                    return;
-                }
-            }
-        }
-
-        private static Rect GetScreenRect(FrameworkElement element)
-        {
-            try
-            {
-                var topLeft = element.PointToScreen(new Point(0, 0));
-                var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
-                return new Rect(topLeft, bottomRight);
-            }
-            catch
-            {
-                return Rect.Empty;
-            }
-        }
-
-        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
-        {
-            if (parent == null) yield break;
-            int count = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < count; i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T t) yield return t;
-                foreach (var grandChild in FindVisualChildren<T>(child))
-                    yield return grandChild;
-            }
+            _window.WheelScrollByRawDelta(delta);
         }
 
         public void Dispose()

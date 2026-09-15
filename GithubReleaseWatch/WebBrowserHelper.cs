@@ -109,8 +109,11 @@ namespace GithubReleaseWatch
                         int padding = 4; // 防止底部截断
                         webBrowser.Height = Math.Max(scrollHeight + padding, 30);
 
-                        // 高度调整后重新裁剪，确保不会超出视口
-                        ClipBrowserToViewport(webBrowser);
+                        // 高度变化要等布局完成后才生效，此时 PointToScreen 仍是旧位置，
+                        // 立即裁剪会算错区域，导致 WebBrowser 越界遮挡固定区。延迟一帧再裁剪。
+                        webBrowser.Dispatcher.BeginInvoke(
+                            new Action(() => ClipBrowserToViewport(webBrowser)),
+                            System.Windows.Threading.DispatcherPriority.Loaded);
                     }
                     catch { /* COM/动态失败时保持原高度 */ }
                 }, System.Windows.Threading.DispatcherPriority.Background);

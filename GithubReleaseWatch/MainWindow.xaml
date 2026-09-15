@@ -107,17 +107,24 @@
                           ResizeBehavior="PreviousAndNext"/>
 
             <!-- 右侧：选中仓库的版本详情 -->
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
-                         x:Name="RightScrollViewer">
-                <StackPanel Margin="14,12">
-                    <TextBlock x:Name="Placeholder" Text="← 在左侧选择一个仓库，查看最近版本和版本说明"
-                               Foreground="#9CA3AF" FontSize="14" Margin="0,20,0,0"/>
+            <!-- 结构：右列只有一个 Grid，用两行把「固定区」和「滚动区」分开。
+                 RightScrollViewer 只作用于下方 3 个版本卡片，上方的仓库名/按钮/版本号/最近版本标题保持冻结。 -->
+            <Grid Grid.Column="2">
+                <!-- 未选中仓库时的占位提示（与详情区互斥显示） -->
+                <TextBlock x:Name="Placeholder" Text="← 在左侧选择一个仓库，查看最近版本和版本说明"
+                           Foreground="#9CA3AF" FontSize="14" Margin="14,32,14,0"/>
 
-                    <StackPanel x:Name="DetailsContent">
+                <Grid x:Name="DetailsContent" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ===== 固定区：不参与滚动 ===== -->
+                    <StackPanel Grid.Row="0" Margin="14,12,14,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
@@ -132,7 +139,6 @@
                         <TextBlock Text="{Binding ErrorText}" Foreground="#DC2626" Margin="0,6,0,0" TextWrapping="Wrap"/>
                         <Separator Margin="0,14"/>
 
-                        <!-- 固定标题栏：不随版本列表滚动 -->
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -144,9 +150,11 @@
                                           Padding="8,2" FontSize="11" Checked="BtnToggleAllVersions_Checked"
                                           Unchecked="BtnToggleAllVersions_Unchecked" IsChecked="True"/>
                         </Grid>
+                    </StackPanel>
 
-                        <!-- 版本列表：三个版本共用外层 RightScrollViewer 滚动，卡片本身不滚动 -->
-                        <ItemsControl ItemsSource="{Binding VisibleReleases}">
+                    <!-- ===== 滚动区：只对 3 个版本卡片生效 ===== -->
+                    <ScrollViewer Grid.Row="1" x:Name="RightScrollViewer" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding VisibleReleases}" Margin="14,0,14,12">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="White" BorderBrush="#E5E7EB" BorderThickness="1"
@@ -175,15 +183,13 @@
                                                     <Button Content="设为当前版本" Click="BtnMarkRelease_Click"
                                                             Padding="8,2" FontSize="11"/>
                                                 </StackPanel>
-                                                <!-- 折叠/展开切换按钮 -->
-                                                <ToggleButton Grid.Column="2" Content="▼" x:Name="BtnToggleVersionBody"
-                                                               Padding="6,2" FontSize="11" Width="32"
-                                                               IsChecked="True" Click="BtnToggleVersionBody_Click"/>
+                                                <ToggleButton Grid.Column="2" Content="▼"
+                                                              Padding="6,2" FontSize="11" Width="32"
+                                                              IsChecked="True" Click="BtnToggleVersionBody_Click"/>
                                             </Grid>
                                             <!-- 版本说明：由 GitHub /markdown API 渲染后的 HTML；
                                                  用 Border 限定可见区域，防止 WebBrowser (HwndHost) 覆盖上下控件。 -->
-                                            <Border x:Name="VersionBodyBorder" Background="Transparent"
-                                                    Margin="0,8,0,0" ClipToBounds="True">
+                                            <Border Background="Transparent" Margin="0,8,0,0" ClipToBounds="True">
                                                 <WebBrowser local:WebBrowserHelper.BindableHtml="{Binding BodyHtml}"
                                                             local:WebBrowserHelper.AutoHeight="True"
                                                             Focusable="False"/>
@@ -193,9 +199,9 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>
