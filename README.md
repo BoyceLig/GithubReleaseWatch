@@ -13,7 +13,6 @@
 - **配额显示** —— 主面板与设置面板实时显示已用/剩余 API 配额（`/rate_limit` 端点不计配额）
 - **失效地址自动迁移** —— 仓库改名时 GitHub 返回 301，程序自动跟随并更新本地 URL
 - **添加查重** —— 重复添加同一仓库会弹窗拦截
-- **托盘常驻** —— **打开软件即驻留系统托盘**（不必先关窗口），关闭窗口最小化到托盘，双击图标恢复窗口，右键可刷新/设置/退出
 
 <img width="1136" height="693" alt="image" src="https://github.com/user-attachments/assets/b7a8d32e-e248-4e39-90d1-d28bc2872bf9" />
 <img width="506" height="253" alt="image" src="https://github.com/user-attachments/assets/297d9b43-a633-475c-9dfd-0024bc52faaa" />
