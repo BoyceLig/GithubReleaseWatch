@@ -14,13 +14,9 @@ namespace GithubReleaseWatch
         /// <summary>标识当前实例是否成功创建了互斥体（即是否为第一个实例）。</summary>
         private bool _ownsMutex;
 
-        /// <summary>命名事件：其他实例通过 Set 此事件通知本实例显示主窗口。</summary>
-        private const string ShowEventName = "GithubReleaseWatch_ShowEvent";
-
         /// <summary>命名事件：其他实例通过 Set 此事件让本实例弹出"已在运行"模态提示。</summary>
         private const string AlertEventName = "GithubReleaseWatch_AlertEvent";
 
-        private EventWaitHandle? _showEvent;
         private EventWaitHandle? _alertEvent;
         private CancellationTokenSource? _eventCts;
 
@@ -38,8 +34,7 @@ namespace GithubReleaseWatch
                 return;
             }
 
-            // 第一个实例：创建命名事件并启动后台线程，等待其他实例唤醒主窗口或弹出提示。
-            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            // 第一个实例：创建命名事件并启动后台线程，等待其他实例弹出"已在运行"提示。
             _alertEvent = new EventWaitHandle(false, EventResetMode.AutoReset, AlertEventName);
             _eventCts = new CancellationTokenSource();
             _ = Task.Run(() => WaitForEvents(_eventCts.Token));
@@ -47,7 +42,7 @@ namespace GithubReleaseWatch
             base.OnStartup(e);
 
             // 主窗口改为手动创建：StartupUri 会让第二个实例也创建 MainWindow，
-            // 随后 Shutdown() 关闭它时会触发第二实例的 OnClosing，导致误弹"已最小化"通知。
+            // 导致本应直接退出的第二实例也弹出主窗口。
             var mainWindow = new GithubReleaseWatch.MainWindow();
             MainWindow = mainWindow;
             mainWindow.Show();
@@ -56,9 +51,7 @@ namespace GithubReleaseWatch
         protected override void OnExit(ExitEventArgs e)
         {
             _eventCts?.Cancel();
-            try { _showEvent?.Set(); } catch { /* 唤醒等待线程以便退出 */ }
             try { _alertEvent?.Set(); } catch { }
-            _showEvent?.Dispose();
             _alertEvent?.Dispose();
 
             if (_ownsMutex)
@@ -72,19 +65,16 @@ namespace GithubReleaseWatch
         /// <summary>后台线程：等待其他实例要求显示主窗口或弹出提示。</summary>
         private void WaitForEvents(CancellationToken token)
         {
-            var handles = new WaitHandle[] { _showEvent!, _alertEvent! };
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    int index = WaitHandle.WaitAny(handles);
+                    WaitHandle.WaitAny(new WaitHandle[] { _alertEvent! });
                     if (token.IsCancellationRequested) break;
 
                     Dispatcher.BeginInvoke(() =>
                     {
-                        if (MainWindow is not MainWindow main) return;
-                        if (index == 0) main.ShowMainWindow();
-                        else if (index == 1) main.ShowAlreadyRunningAlert();
+                        if (MainWindow is MainWindow main) main.ShowAlreadyRunningAlert();
                     });
                 }
                 catch (OperationCanceledException) { break; }
@@ -105,14 +95,7 @@ namespace GithubReleaseWatch
         /// </summary>
         private void ActivateExistingInstance()
         {
-            // 通知已有实例：先恢复窗口，再弹出模态提示。
-            try
-            {
-                using var showEvent = EventWaitHandle.OpenExisting(ShowEventName);
-                showEvent.Set();
-            }
-            catch { /* 事件不存在则忽略 */ }
-
+            // 通知已有实例弹出"已在运行"模态提示。
             try
             {
                 using var alertEvent = EventWaitHandle.OpenExisting(AlertEventName);

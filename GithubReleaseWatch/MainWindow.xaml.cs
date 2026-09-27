@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Forms; // NotifyIcon (WinForms)
-using System.Windows.Input; // MouseButtonEventArgs / MouseEventArgs (避免被 WinForms 同名类覆盖)
+using System.Windows.Input; // MouseButtonEventArgs / MouseEventArgs
 using System.Windows.Media;
 using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
@@ -21,10 +19,6 @@ namespace GithubReleaseWatch
     {
         private AppConfig _config = new();
         public ObservableCollection<RepoViewModel> Repos { get; } = new();
-        private NotifyIcon? _notifyIcon;
-        private bool _reallyClosing = false; // 用户从托盘菜单"退出"时才真正关闭
-        /// <summary>从托盘恢复并显示"已在运行"提示期间，忽略可能延迟触发的窗口关闭请求。</summary>
-        private DateTime _ignoreClosingUntil;
         private DispatcherTimer? _rateLimitTimer;
         private DispatcherTimer? _rateLimitRedrawTimer;
         /// <summary>最近一次配额快照，用于本地重绘倒计时（不额外请求 API）。</summary>
@@ -81,8 +75,6 @@ namespace GithubReleaseWatch
             // 启用拖拽排序：释放时把 _config.Repos 也同步到 Repos 的顺序并落盘
             _dragReorder = new ListBoxDragReorder(RepoList, Repos, PersistOrder);
 
-            InitNotifyIcon();
-
             // 安装鼠标滚轮钩子兜底
             try
             {
@@ -102,7 +94,7 @@ namespace GithubReleaseWatch
 
             // 配额显示：每 60 秒真正请求一次 /rate_limit（不计配额），
             // 另外每 20 秒用缓存的快照重绘文本，让"重置倒计时"能走字。
-            // 窗口最小化到托盘时暂停，避免无谓请求。
+            // 窗口最小化或关闭时暂停，避免无谓请求。
             _rateLimitTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             _rateLimitTimer.Tick += async (_, _) =>
             {
@@ -125,7 +117,6 @@ namespace GithubReleaseWatch
                 _rateLimitTimer?.Stop();
                 _rateLimitRedrawTimer?.Stop();
                 StopSmoothScroll();
-                _notifyIcon?.Dispose();
                 try { _mouseWheelHook?.Dispose(); }
                 catch { }
             };
@@ -459,22 +450,28 @@ namespace GithubReleaseWatch
             await RefreshRateLimitAsync();
         }
 
-        /// <summary>"完成"：当前版本提升到最新版本。</summary>
+        /// <summary>"完成"（右侧按钮）：当前版本提升到最新版本。</summary>
         private void BtnComplete_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedRepo is not { } vm) return;
+            if (SelectedRepo is { } vm) CompleteUpgrade(vm);
+        }
+
+        /// <summary>
+        /// 把指定仓库的当前版本提升到最新版本并落盘。
+        /// 右侧"完成"按钮与左侧列表右键菜单共用这一份逻辑。
+        /// </summary>
+        private void CompleteUpgrade(RepoViewModel vm)
+        {
             if (vm.LatestVisible is not { } latest)
             {
-                MessageBox.Show(this, "该仓库没有可用版本（可能全部被 Pre-release 过滤）。", "提示",
+                MessageBox.Show(this, $"{vm.DisplayName} 没有可用版本（可能全部被 Pre-release 过滤）。", "提示",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             vm.SetCurrent(latest.TagName);
             ConfigStore.Save(_config);
+            TxtStatus.Text = $"✅ {vm.DisplayName} 当前版本已更新为 {latest.TagName}";
         }
-
-        /// <summary>右侧标题栏退出按钮：完全退出程序（区别于点 X 最小化到托盘）。</summary>
-        private void BtnExit_Click(object sender, RoutedEventArgs e) => ExitApp();
 
         /// <summary>把某个具体版本设为当前版本。</summary>
         private void BtnMarkRelease_Click(object sender, RoutedEventArgs e)
@@ -525,48 +522,7 @@ namespace GithubReleaseWatch
                 Process.Start(new ProcessStartInfo(vm.Config.Url) { UseShellExecute = true });
         }
 
-        // ===== 任务栏常驻图标 =====
-
-        private void InitNotifyIcon()
-        {
-            _notifyIcon = new NotifyIcon
-            {
-                Icon = LoadTrayIcon(),
-                Visible = true, // 打开软件即出现，不等关闭窗口
-                Text = "GithubReleaseWatch — GitHub Release 监测"
-            };
-
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("📖 显示主窗口", null, (_, _) => ShowMainWindow());
-            menu.Items.Add("🔄 刷新全部", null, async (_, _) => await RefreshAllAsync());
-            menu.Items.Add("⚙ 设置", null, (_, _) => BtnSettings_Click(this, new RoutedEventArgs()));
-            menu.Items.Add("ℹ️ 关于", null, (_, _) => BtnAbout_Click(this, new RoutedEventArgs()));
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("❌ 退出", null, (_, _) => ExitApp());
-            _notifyIcon.ContextMenuStrip = menu;
-
-            _notifyIcon.DoubleClick += (_, _) => ShowMainWindow();
-            // 注意：Win10 通知未关闭时右键托盘图标，可能会误触发 BalloonTipClicked，
-            // 导致主窗口被唤醒而不是仅弹出菜单，因此不再绑定该事件。
-        }
-
-        /// <summary>
-        /// 加载托盘图标：优先读项目内嵌资源 GithubReleaseWatch.ico；读不到则回退到系统应用图标。
-        /// </summary>
-        private static Icon LoadTrayIcon()
-        {
-            try
-            {
-                var asmDir = System.IO.Path.GetDirectoryName(typeof(MainWindow).Assembly.Location)!;
-                var icoPath = System.IO.Path.Combine(asmDir, "GithubReleaseWatch.ico");
-                if (System.IO.File.Exists(icoPath))
-                    return new Icon(icoPath);
-            }
-            catch { /* 忽略，回退 */ }
-            return SystemIcons.Application;
-        }
-
-        /// <summary>从托盘恢复主窗口（不重复创建，已显示则前置）。</summary>
+        /// <summary>从其他实例/提示框激活本窗口（不重复创建，已显示则前置）。</summary>
         internal void ShowMainWindow()
         {
             if (!IsVisible) Show();
@@ -582,11 +538,7 @@ namespace GithubReleaseWatch
         {
             ShowMainWindow();
 
-            // 从恢复窗口到提示框关闭后的一段时间内，忽略可能延迟触发的 OnClosing，
-            // 避免"已最小化到系统托盘"的气球通知被误触发。
-            _ignoreClosingUntil = DateTime.Now.AddSeconds(2);
-
-            // 使用自定义 Window 而不是 MessageBox，避免 MessageBox 关闭时误触发 owner 的 OnClosing。
+            // 使用自定义 Window 而不是 MessageBox，避免 MessageBox 关闭时把焦点/键盘事件误传给主窗口。
             var alert = new Window
             {
                 Owner = this,
@@ -649,41 +601,6 @@ namespace GithubReleaseWatch
             alert.ShowDialog();
         }
 
-        /// <summary>真正退出应用（区分于点 X 触发的"最小化到托盘"）。</summary>
-        private void ExitApp()
-        {
-            _reallyClosing = true;
-            if (_notifyIcon != null) _notifyIcon.Visible = false;
-            System.Windows.Application.Current.Shutdown();
-        }
-
-        /// <summary>点窗口关闭按钮 → 最小化到托盘（除非用户从托盘菜单"退出"）。</summary>
-        protected override void OnClosing(CancelEventArgs e)
-        {
-            // 从托盘恢复并显示"已在运行"提示期间，防御性地忽略此窗口内的关闭请求，
-            // 避免误发"已最小化"通知（根本问题已在 App.xaml 修复：第二实例不再创建 MainWindow）。
-            if (DateTime.Now < _ignoreClosingUntil && !_reallyClosing)
-            {
-                e.Cancel = true;
-                base.OnClosing(e);
-                return;
-            }
-
-            if (!_reallyClosing)
-            {
-                e.Cancel = true;
-                Hide();
-                // 托盘图标打开软件时已常驻，这里只需提示"已最小化"
-                if (_notifyIcon != null)
-                {
-                    _notifyIcon.BalloonTipTitle = "GithubReleaseWatch";
-                    _notifyIcon.BalloonTipText = "已最小化到系统托盘，双击图标可重新打开窗口，右键可退出。";
-                    _notifyIcon.ShowBalloonTip(2500);
-                }
-            }
-            base.OnClosing(e);
-        }
-
         // ===== 拖拽排序：把容器事件转发给 helper，保持选中、避免误触发 =====
 
         private void RepoListItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -703,6 +620,13 @@ namespace GithubReleaseWatch
         {
             if (sender is MenuItem { DataContext: RepoViewModel vm })
                 _ = RefreshRepoAsync(vm);
+        }
+
+        /// <summary>右键菜单"完成：升级到最新"：把该仓库当前版本提升到最新版本。</summary>
+        private void CtxComplete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem { DataContext: RepoViewModel vm })
+                CompleteUpgrade(vm);
         }
 
         private void CtxOpenGitHub_Click(object sender, RoutedEventArgs e)

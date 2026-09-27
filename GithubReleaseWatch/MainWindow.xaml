@@ -11,6 +11,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <ContextMenu x:Key="RepoItemContextMenu" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="🔄 刷新此仓库" Click="CtxRefreshRepo_Click"/>
+            <MenuItem Header="✅ 完成：升级到最新" Click="CtxComplete_Click"/>
             <MenuItem Header="🌐 在 GitHub 打开" Click="CtxOpenGitHub_Click"/>
             <Separator/>
             <MenuItem Header="🗑 移除此仓库" Click="CtxRemoveRepo_Click"/>
@@ -37,8 +38,6 @@
                     <TextBlock x:Name="TxtRateLimit" VerticalAlignment="Center" Margin="24,0,0,0" Foreground="#374151" FontSize="12"
                                ToolTip="GitHub API 当前已用/剩余配额（/rate_limit 端点不计配额，可随时刷新）"/>
                 </StackPanel>
-                <Button Grid.Column="1" x:Name="BtnExit" Content="❌ 退出"
-                        HorizontalAlignment="Right" ToolTip="完全退出程序" Padding="10,5"  Click="BtnExit_Click" VerticalAlignment="Center" HorizontalContentAlignment="Center"/>
             </Grid>
         </Border>
 

@@ -4,7 +4,6 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GithubReleaseWatch</RootNamespace>
@@ -27,7 +26,7 @@
       增量构建时从输出目录删掉。
     -->
     <None Update="config.json" CopyToOutputDirectory="Never" />
-    <!-- 图标随程序发布（运行时供托盘 NotifyIcon / 关于窗口读取） -->
+    <!-- 图标随程序发布（窗口 Icon= 引用） -->
     <None Update="GithubReleaseWatch.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- 关于窗口头部用的大尺寸图标（256 PNG） -->
     <None Update="AppIcon.png" CopyToOutputDirectory="PreserveNewest" />
