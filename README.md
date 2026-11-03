@@ -22,7 +22,8 @@
 
 ## 环境要求
 
-- Windows 10 / 11
+- Windows 10 1809 及以上 / Windows 11
+- Microsoft Edge WebView2 Runtime（版本说明使用组合式 WebView2 显示）
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)（含 ".NET 桌面开发" 工作负载）
 - Visual Studio 2022（可选，推荐）
 
@@ -41,7 +42,7 @@
       "Url": "https://github.com/BoyceLig/GithubReleaseWatch",
       "Owner": "BoyceLig",
       "Repo": "GithubReleaseWatch",
-      "CurrentVersion": "v1.0.0"
+      "CurrentVersion": "v1.0.1"
     }
   ],
   "ShowPrerelease": false,
@@ -68,6 +69,65 @@ GitHub 未认证请求的配额为 **60 次/小时**，且按**出口 IP** 统�
 配置并勾选「启用 Token」后配额提升到 **5000 次/小时**，并按 Token 独立计数，与代理是否共享无关。
 
 > `/rate_limit` 端点**不计入**配额，所以程序中"测试代理""测试 Token""显示配额"等操作可以放心频繁调用。
+
+## 开发与验证
+
+当前版本：**1.0.1**。使用 .NET 8 SDK 构建：
+
+```powershell
+dotnet build GithubReleaseWatch.sln -c Release
+dotnet run --project GithubReleaseWatch.Tests
+# 需要本机图形环境及 WebView2 Runtime，会短暂打开测试窗口：
+dotnet run --project GithubReleaseWatch.Tests -- --browser
+```
+
+回归程序使用模拟 HTTP 响应与自身输出目录下的临时配置，不使用真实 Token，也不访问 GitHub。
+浏览器测试覆盖长内容、宽度变化、快速往返滚动、内容缩短、卸载重建及版本卡片绑定。
+
+## 自动发布
+
+推送 `1.0.1` 或 `v1.0.1` 这样的版本标签后，GitHub Actions 自动校验版本、运行回归检查，并分别打包 Windows x64、x86、ARM64。
+每个架构独立生成 ZIP，保留 exe、DLL 和配置文件，**不合并单文件**。
+
+成功后会创建详情为空的 **草稿 Release** 并上传附件，你填写说明后再正式发布。普通代码推送或修改版本号不会触发打包。
+操作步骤和重试说明见 [自动发布说明](docs/RELEASING.md)。
+
+## 项目目录
+
+```text
+GithubReleaseWatch/
+├── App.xaml / App.xaml.cs      # 应用入口
+├── Behaviors/                 # 列表拖拽等界面行为
+├── Controls/                  # Markdown 浏览器控件与消息解析
+├── Models/                    # 配置、仓库与版本数据模型
+├── ViewModels/                # 仓库展示状态
+├── Services/
+│   ├── Configuration/         # 配置读取、原子保存与备份
+│   ├── GitHub/                # API、网络会话与缓存
+│   └── Markdown/              # GitHub 渲染与 HTML 包装
+├── Utilities/                 # 版本比较、应用信息与外部链接
+├── Views/
+│   ├── Main/                  # 主窗口及按职责拆分的代码
+│   ├── Dialogs/               # 共用仓库编辑表单、添加/编辑入口、输入框
+│   ├── Settings/              # 设置窗口
+│   ├── About/                 # 关于窗口
+│   └── Help/                  # 帮助窗口
+└── Resources/
+    ├── Icons/                 # 应用图标与图片
+    └── Defaults/              # 默认配置模板
+
+GithubReleaseWatch.Tests/
+├── Program.cs                 # 回归检查入口
+├── Domain/                    # 模型、地址、版本与配置检查
+├── Networking/                # 模拟 HTTP 与并发检查
+└── UI/                        # 窗口和真实 WebView2 检查
+
+assets/icon/                   # 图标生成脚本及导出的多尺寸图标
+```
+
+`Views/Main` 下保留按刷新、仓库操作、版本卡片、滚动和配额拆分的主窗口代码。
+添加和编辑共用 `Views/Dialogs/RepositoryEditorWindow`。
+默认配置在 `Resources/Defaults/config.json`，运行时仍使用 exe 同目录的 `config.json`；构建和发布不会覆盖已有配置。
 
 ## 许可协议
 

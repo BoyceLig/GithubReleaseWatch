@@ -1,0 +1,111 @@
+name: Package Windows release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - '[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  verify:
+    name: Validate version and run regression checks
+    if: ${{ !github.event.deleted }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate tag matches project version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/release/Get-ReleaseVersion.ps1 -Tag $env:RELEASE_TAG
+      - name: Restore and build
+        run: |
+          dotnet restore GithubReleaseWatch.sln
+          if ($LASTEXITCODE -ne 0) { throw 'Restore failed' }
+          dotnet build GithubReleaseWatch.sln -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+      - name: Run regression checks
+        # Hosted runners do not provide the interactive desktop needed by --browser.
+        run: |
+          dotnet run --project GithubReleaseWatch.Tests/GithubReleaseWatch.Tests.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'Regression checks failed' }
+      - name: Check draft release script
+        run: |
+          node --test scripts/release/Create-Draft.test.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Release script checks failed' }
+
+  package:
+    name: Package ${{ matrix.runtime }}
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-x86, win-arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish directory and create ZIP
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_RUNTIME: ${{ matrix.runtime }}
+        run: ./scripts/release/Build-Package.ps1 -Tag $env:RELEASE_TAG -RuntimeIdentifier $env:RELEASE_RUNTIME
+      - name: Save package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.runtime }}
+          path: |
+            artifacts/releases/*.zip
+            artifacts/releases/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create draft release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: package-*
+          path: artifacts/releases
+          merge-multiple: true
+      - name: Upload packages to draft release
+        uses: actions/github-script@v9
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        with:
+          script: |
+            const createDraft = require('./scripts/release/Create-Draft.cjs');
+            await createDraft({ github, context, core });

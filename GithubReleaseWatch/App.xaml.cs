@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -19,6 +18,7 @@ namespace GithubReleaseWatch
 
         private EventWaitHandle? _alertEvent;
         private CancellationTokenSource? _eventCts;
+        private Task? _eventTask;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -37,7 +37,8 @@ namespace GithubReleaseWatch
             // 第一个实例：创建命名事件并启动后台线程，等待其他实例弹出"已在运行"提示。
             _alertEvent = new EventWaitHandle(false, EventResetMode.AutoReset, AlertEventName);
             _eventCts = new CancellationTokenSource();
-            _ = Task.Run(() => WaitForEvents(_eventCts.Token));
+            var token = _eventCts.Token;
+            _eventTask = Task.Run(() => WaitForEvents(token));
 
             base.OnStartup(e);
 
@@ -51,8 +52,9 @@ namespace GithubReleaseWatch
         protected override void OnExit(ExitEventArgs e)
         {
             _eventCts?.Cancel();
-            try { _alertEvent?.Set(); } catch { }
+            _eventTask?.GetAwaiter().GetResult();
             _alertEvent?.Dispose();
+            _eventCts?.Dispose();
 
             if (_ownsMutex)
             {
@@ -69,8 +71,9 @@ namespace GithubReleaseWatch
             {
                 try
                 {
-                    WaitHandle.WaitAny(new WaitHandle[] { _alertEvent! });
+                    WaitHandle.WaitAny(new WaitHandle[] { _alertEvent!, token.WaitHandle });
                     if (token.IsCancellationRequested) break;
+                    if (Dispatcher.HasShutdownStarted) break;
 
                     Dispatcher.BeginInvoke(() =>
                     {
@@ -78,16 +81,10 @@ namespace GithubReleaseWatch
                     });
                 }
                 catch (OperationCanceledException) { break; }
-                catch { /* 忽略异常，继续等待 */ }
+                catch (ObjectDisposedException) { break; }
+                catch (InvalidOperationException) { break; }
             }
         }
-
-        #region Win32 API
-
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern IntPtr FindWindowW(string? lpClassName, string lpWindowName);
-
-        #endregion
 
         /// <summary>
         /// 激活已存在的实例窗口：通过命名事件通知它显示自己并弹出模态提示，

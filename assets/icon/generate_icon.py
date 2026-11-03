@@ -1,13 +1,13 @@
 """
 生成 GithubReleaseWatch 应用图标（PNG 多分辨率 + ICO 多分辨率）。
 
-设计：纯蓝底（垂直渐变）+ 白色 "GRW" 字样，无其他装饰。
+设计：纯蓝底 + 白色 "GRW" 字样，无其他装饰。
 """
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
 SIZES_PNG = [16, 24, 32, 48, 64, 128, 256]
-ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+ICO_SIZES = [(size, size) for size in SIZES_PNG]
 
 OUT_DIR = Path(__file__).resolve().parent
 PNG_BASE = OUT_DIR / "GithubReleaseWatch"
@@ -16,14 +16,6 @@ ICO_OUT = OUT_DIR / "GithubReleaseWatch.ico"
 # 纯蓝底配色（去掉徽章 / 渐变就用一种）
 BG_COLOR = (37, 99, 235, 255)  # #2563EB —— 与界面主色保持一致
 FG_WHITE = (255, 255, 255, 255)
-
-
-def _draw_solid_bg(img: Image.Image):
-    w, h = img.size
-    px = img.load()
-    for y in range(h):
-        for x in range(w):
-            px[x, y] = BG_COLOR
 
 
 def _safe_font(size: int) -> ImageFont.FreeTypeFont:
@@ -40,10 +32,9 @@ def _safe_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def _make_base(size: int) -> Image.Image:
-    s = max(size, 32)
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    _draw_solid_bg(img)
+def _make_base(target_size: int) -> Image.Image:
+    s = max(target_size, 32)
+    img = Image.new("RGBA", (s, s), BG_COLOR)
 
     # 圆角蒙版
     mask = Image.new("L", (s, s), 0)
@@ -72,7 +63,8 @@ def _make_base(size: int) -> Image.Image:
     ty = (s - th) // 2 - bbox[1]
     draw.text((tx, ty), text, fill=FG_WHITE, font=font)
 
-    return out
+    # 小图在 32px 画布上绘制后缩小，输出尺寸必须与文件名一致。
+    return out if s == target_size else out.resize((target_size, target_size), Image.Resampling.LANCZOS)
 
 
 def main():

@@ -53,7 +53,7 @@ PublishOutput/
 
 # ===== 本项目的运行时数据 =====
 ## 用户本地配置（含 Token / 代理账密，切勿提交）
-## 注意：仓库根目录的 config.json 是种子模板，需要提交；
+## 注意：Resources/Defaults/config.json 是种子模板，需要提交；
 ##       仅忽略编译输出目录里的运行时副本。
 GithubReleaseWatch/bin/**/config.json
 GithubReleaseWatch/obj/**/config.json
@@ -71,3 +71,7 @@ desktop.ini
 *.swp
 *.swo
 screenshot*
+
+# Python 图标生成脚本缓存
+__pycache__/
+*.pyc
