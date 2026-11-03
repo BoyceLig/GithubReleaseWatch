@@ -50,7 +50,7 @@ public sealed class GitHubMarkdownView : ContentControl
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_browser != null) return;
-        var browser = new WebView2CompositionControl();
+        var browser = new ScrollAwareWebView2();
         _browser = browser;
         Content = browser;
         try

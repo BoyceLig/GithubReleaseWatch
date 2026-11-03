@@ -2,6 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Web.WebView2.Core;
+using System.Reflection;
+using System.Windows.Input;
 using static GithubReleaseWatch.Tests.Program;
 
 namespace GithubReleaseWatch.Tests;
@@ -82,6 +85,43 @@ internal static class BrowserChecks
                 window.ChkPrerelease.IsChecked = true;
                 await WaitUntilAsync(() => Descendants<GitHubMarkdownView>(window).Count() == 2, "prerelease cards");
                 Check(vm.VisibleReleases.Count() == 2, "prerelease filter");
+            }
+            finally { window.Close(); }
+        });
+        await TestAsync("Scrolled browser synchronizes native popup bounds and keeps keyboard focus", async () =>
+        {
+            var view = new GitHubMarkdownView
+            {
+                Html = GitHubHtmlPage.Wrap(string.Concat(Enumerable.Range(0, 150).Select(i => $"<p>Selectable line {i}</p>")))
+            };
+            var scroll = new BrowserScrollViewer { Content = view, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            var window = new Window { Title = "Browser input regression", Width = 800, Height = 500, Content = scroll };
+            try
+            {
+                window.Show();
+                await WaitUntilAsync(() => view.Height > 2000, "input page height");
+                var browser = (ScrollAwareWebView2)view.Content!;
+                var state = typeof(WebView2CompositionControl).GetField("m_webview2Base", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(browser)!;
+                var controller = (CoreWebView2Controller)state.GetType().GetProperty("CoreWebView2Controller", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(state)!;
+                Check(browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled, "native context menu disabled");
+                var before = controller.Bounds;
+                foreach (double offset in new[] { 500.0, 1000.0, 250.0 })
+                {
+                    scroll.ScrollToVerticalOffset(offset);
+                    await WaitUntilAsync(() => Math.Abs(scroll.VerticalOffset - offset) < 1, "scroll offset");
+                    await Task.Delay(50);
+                    var origin = browser.TranslatePoint(new Point(), window);
+                    double scale = VisualTreeHelper.GetDpi(browser).DpiScaleX;
+                    Check(Math.Abs(controller.Bounds.Y - (int)(origin.Y * scale)) <= 1 &&
+                        Math.Abs(controller.Bounds.X - (int)(origin.X * scale)) <= 1,
+                        $"native popup origin stale at scroll offset {offset}: {controller.Bounds}");
+                }
+                Check(controller.Bounds.Y < before.Y, "native controller never moved");
+                window.Activate();
+                browser.Focus();
+                await WaitUntilAsync(() => browser.HasFocusWithin(), "native keyboard focus");
+                // 原生 Chromium 获得 Win32 焦点后，WPF 的 FocusedElement 可以为空。
+                Check(Keyboard.FocusedElement is not ScrollViewer && !scroll.Focusable, "scroll viewer took focus from browser");
             }
             finally { window.Close(); }
         });

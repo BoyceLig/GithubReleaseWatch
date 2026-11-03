@@ -38,6 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ScrollAwareWebView2 对此 SDK 的坐标同步做兼容处理；升级时运行浏览器回归。 -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <InternalsVisibleTo Include="GithubReleaseWatch.Tests" />
   </ItemGroup>

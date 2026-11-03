@@ -155,7 +155,7 @@
                     </StackPanel>
 
                     <!-- ===== 滚动区：只对 3 个版本卡片生效 ===== -->
-                    <ScrollViewer Grid.Row="1" x:Name="RightScrollViewer" VerticalScrollBarVisibility="Auto">
+                    <local:BrowserScrollViewer Grid.Row="1" x:Name="RightScrollViewer" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding VisibleReleases}" Margin="14,0,14,12">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -210,7 +210,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
+                    </local:BrowserScrollViewer>
                 </Grid>
             </Grid>
         </Grid>

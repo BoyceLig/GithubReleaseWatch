@@ -83,6 +83,8 @@ dotnet run --project GithubReleaseWatch.Tests -- --browser
 
 回归程序使用模拟 HTTP 响应与自身输出目录下的临时配置，不使用真实 Token，也不访问 GitHub。
 浏览器测试覆盖长内容、宽度变化、快速往返滚动、内容缩短、卸载重建及版本卡片绑定。
+也检查外层滚动后的原生菜单坐标和键盘焦点。`Controls/ScrollAwareWebView2` 包含当前固定 SDK 的位置同步兼容处理，升级 WebView2 包后应运行 `--browser` 回归。
+如需检查真实 Ctrl+C，可运行 `dotnet run --project GithubReleaseWatch.Tests -- --input-check`，按测试窗口提示复制选中文本；测试完成后会恢复剪贴板。
 
 ## 自动发布
 

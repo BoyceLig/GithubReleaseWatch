@@ -19,6 +19,7 @@ internal static class Program
                 await ApiChecks.RunAsync();
                 await WindowChecks.RunAsync();
                 if (args.Contains("--browser")) await BrowserChecks.RunAsync();
+                if (args.Contains("--input-check")) await BrowserInputCheck.RunAsync();
             }
             catch (Exception ex) { _failed++; Console.WriteLine($"FAIL runner: {ex}"); }
             finally

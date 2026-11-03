@@ -48,10 +48,16 @@ internal static class WindowChecks
         {
             var handler = new FakeHandler(_ => Task.FromResult(FakeHandler.Json("[]")));
             FakeHandler.Apply(handler);
-            var settings = new SettingsWindow(new(), "", false, false);
+            var proxy = new ProxyConfig { Host = "original-host", Port = 7890 };
+            var settings = new SettingsWindow(proxy, "original-token", false, false);
+            settings.TxtHost.Text = "edited-host";
+            settings.TxtPort.Text = "1234";
+            settings.TxtToken.Text = "edited-token";
             settings.ChkTokenEnabled.IsChecked = true;
             settings.Close();
             Check(!handler.Disposed && handler.Requests == 0, "cancelled settings changed active session");
+            Check(proxy.Host == "original-host" && proxy.Port == 7890 && settings.DialogResult != true,
+                "closing without Save committed settings");
         });
         Test("Selected repository and expansion master work before template generation", () =>
         {
